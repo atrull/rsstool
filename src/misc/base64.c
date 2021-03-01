@@ -1,5 +1,5 @@
 /*
-codec_base64.h - base64 codec
+base64.c - base64 codec
 
 Copyright (c) 2006 NoisyB
 
@@ -39,100 +39,11 @@ const char *cvt = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 //                 234567890123
   "0123456789+/";
 
-#if 0
 char *
-encode (char *data, int data_len)
+base64_enc (const char *src, int add_linefeeds)
 {
-  int i;
-  char c;
-  int len = data_len;
-  char *ret;
-
-  for (i = 0; i < len; ++i)
-    {
-      c = (data[i] >> 2) & 0x3f;
-      ret += cvt[c];
-      c = (data[i] << 4) & 0x3f;
-      if (++i < len)
-        c |= (data[i] >> 4) & 0x0f;
-
-      ret += cvt[c];
-      if (i < len)
-        {
-          c = (data[i] << 2) & 0x3f;
-          if (++i < len)
-            c |= (data[i] >> 6) & 0x03;
-
-          ret += cvt[c];
-        }
-      else
-        {
-          ++i;
-          ret += FILLCHAR;
-        }
-
-      if (i < len)
-        {
-          c = data[i] & 0x3f;
-          ret += cvt[c];
-        }
-      else
-        {
-          ret += FILLCHAR;
-        }
-    }
-
-  return (ret);
-}
-
-CString
-Base64::decode (CString data)
-{
-  auto int i;
-  auto char c;
-  auto char c1;
-  auto int len = data.length ();
-  auto CString ret;
-
-  for (i = 0; i < len; ++i)
-    {
-      c = (char) cvt.find (data[i]);
-      ++i;
-      c1 = (char) cvt.find (data[i]);
-      c = (c << 2) | ((c1 >> 4) & 0x3);
-      ret += c;
-      if (++i < len)
-        {
-          c = data[i];
-          if (FILLCHAR == c)
-            break;
-
-          c = (char) cvt.find (c);
-          c1 = ((c1 << 4) & 0xf0) | ((c >> 2) & 0xf);
-          ret += c1;
-        }
-
-      if (++i < len)
-        {
-          c1 = data[i];
-          if (FILLCHAR == c1)
-            break;
-
-          c1 = (char) cvt.find (c1);
-          c = ((c << 6) & 0xc0) | c1;
-          ret += c;
-        }
-    }
-
-  return (ret);
-}
-#endif
-
-
-char *
-base64_enc (char *src)
-{
-  static unsigned char alphabet[] =
+  static unsigned char
+    alphabet[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
   unsigned int bits;
   int i = 0;
@@ -142,12 +53,13 @@ base64_enc (char *src)
   char *dst;
 
   len = strlen (src);
-  dst = malloc (((((len - 1) / 3) + 1) * 4) + 1 + len / 54);
+  dst = (char *) malloc (((((len - 1) / 3) + 1) * 4) + 1 + len / 54);
 
   while (i < len)
     {
-      if (i && i % 54 == 0)
-        dst[j++] = '\n';
+      if (add_linefeeds)
+        if (i && i % 54 == 0)
+          dst[j++] = '\n';
 
       bits = src[i++];
       for (k = 0; k < 2; k++)
@@ -177,3 +89,61 @@ base64_enc (char *src)
 }
 
 
+static const char cd64[] =
+  "|$$$}rstuvwxyz{$$$$$$$>?@ABCDEFGHIJKLMNOPQRSTUVW$$$$$$XYZ[\\]^_`abcdefghijklmnopq";
+void
+decodeblock (unsigned char in[4], unsigned char out[3])
+{
+  out[0] = (unsigned char) (in[0] << 2 | in[1] >> 4);
+  out[1] = (unsigned char) (in[1] << 4 | in[2] >> 2);
+  out[2] = (unsigned char) (((in[2] << 6) & 0xc0) | in[3]);
+}
+
+
+void
+base64_dec (char *dst, const char *src, int maxlength)
+{
+  unsigned char in[4], out[3], v;
+  int i, len;
+  int src_offset = 0;
+  int dst_offset = 0;
+
+  while (src_offset < maxlength)
+    {
+      for (len = 0, i = 0; i < 4 && src_offset < maxlength; i++)
+        {
+          v = 0;
+          while (src_offset < maxlength && v == 0)
+            {
+              v = (unsigned char) *(src + src_offset);
+              src_offset++;
+              v = (unsigned char) ((v < 43 || v > 122) ? 0 : cd64[v - 43]);
+              if (v)
+                {
+                  v = (unsigned char) ((v == '$') ? 0 : v - 61);
+                }
+            }
+          if (src_offset < maxlength)
+            {
+              len++;
+              if (v)
+                {
+                  in[i] = (unsigned char) (v - 1);
+                }
+            }
+          else
+            {
+              in[i] = 0;
+            }
+        }
+      if (len)
+        {
+          decodeblock (in, out);
+          for (i = 0; i < len - 1; i++)
+            {
+              *(dst + dst_offset) = out[i];
+              dst_offset++;
+            }
+        }
+    }
+}

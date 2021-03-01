@@ -34,7 +34,7 @@ extern void rsstool_st_rsstool_t_sanity_check (st_rsstool_t *rsstool);
 
   rsstool_parse_rss()       (down)load an RSS feed and parse it into st_rsstool_t
 
-  rsstool_add_item()        add RSS (or Atom) items to st_rsstool_t
+  rsstool_add_item()        add RSS or Atom items to st_rsstool_t
   rsstool_add_item_s()      add a single item to st_rsstool_t
   rsstool_get_item_count()  get current number of items in st_rsstool_t
 
@@ -53,19 +53,12 @@ extern int rsstool_add_item_s (st_rsstool_t *rt,
                                time_t date,
                                const char *url,
                                const char *title,
-                               const char *desc);
+                               const char *desc,
+                               int media_duration);
 extern int rsstool_get_item_count (st_rsstool_t *rt);
 extern int rsstool_sort (st_rsstool_t * rt);
-#ifdef  USE_HACKS
 extern int rsstool_get_links (const char *file);
-#endif
 extern int rsstool_log (st_rsstool_t * rt, const char *s);
-
-#if 0
-extern void rsstool_olditems_open (st_rsstool_t *rt, const char *feed_url);
-extern int rsstool_olditems_check (st_rsstool_t *rt, const char *url, const char *desc);
-extern void rsstool_olditems_close (st_rsstool_t *rt);
-#endif
 
 
 #endif  // RSSTOOL_MISC_H

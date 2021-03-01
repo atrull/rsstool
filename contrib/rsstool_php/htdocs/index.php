@@ -1,5 +1,6 @@
+<?php
 /*
-base64.h - base64 codec
+index.php - rsstool PHP example
 
 Copyright (c) 2006 NoisyB
 
@@ -18,12 +19,30 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
-#ifndef MISC_BASE64_H
-#define MISC_BASE64_H
+include ('config.php');
+include ('sql.php');
 
+  $db = new misc_sql;
+  $db->sql_open ($dbhost, $dbuser, $dbpass, $dbname);
 
-extern char *base64_enc (const char *src, int add_linefeeds);
-extern void base64_dec (char *dst, const char *src, int maxlength);
+  $sql_query_s = 'SELECT `rsstool_url`, `rsstool_title`, `rsstool_desc`'
+                .' FROM `rsstool_table`'
+                .' ORDER BY `rsstool_dl_date` DESC'
+                .' LIMIT 0,100';
 
+  $db->sql_write ($p);
+  $rsstool_table = $db->sql_read ();
 
-#endif
+  $p = '';
+
+  for ($i = 0; $rsstool_table[$i]; $i++)
+    $p .= '<a href="'
+         .$rsstool_table[$i][0]
+         .'">'
+         .$rsstool_table[$i][1]
+         .'</a><br><br>'
+         .$rsstool_table[$i][2]
+         .'<br><br><hr><br>';
+
+  echo $p;
+?>

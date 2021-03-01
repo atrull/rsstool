@@ -1,5 +1,5 @@
 /*
-rsstool.h - RSStool reading, parsing and writing RSS (and ATOM) feeds
+rsstool.h - RSStool reading, parsing and writing RSS and Atom feeds
 
 Copyright (c) 2006 NoisyB
 
@@ -34,32 +34,19 @@ typedef struct
   char site[RSSTOOL_MAXBUFSIZE];
   char feed_url[RSSTOOL_MAXBUFSIZE];
 
+//  char keywords[RSSTOOL_MAXBUFSIZE];
+  int media_duration; //  default: 0
+
 //  int private;   // used by sort
 } st_rsstool_item_t;
-
-
-#if 0
-typedef struct
-{
-  unsigned char md5[16];
-} st_rsstool_itemhash_t;
-
-
-typedef struct
-{
-  char fname[FILENAME_MAX];
-  st_rsstool_itemhash_t *hash_old; // old items read from file
-  st_rsstool_itemhash_t *hash_new; // new items to be written to file
-  int old_count;
-  int new_count;
-} st_rsstool_olditems_t;
-#endif
 
 
 typedef struct
 {
   int quiet;
+  int timeout;   // timeout for net operations
   time_t start_time;
+  char encoding[MAXBUFSIZE];
   char user_agent[MAXBUFSIZE];
   const char *optarg;
 
@@ -67,9 +54,9 @@ typedef struct
   FILE *output_file; // output pointer (default: stdout)
   char pipe_command[MAXBUFSIZE]; // name of command to pipe the output to,
                                  // empty string if --pipe not used
+  int nosort;         // sort?
   int reverse;      // sort reverse before output
   int rss_version;  // version of RSS
-  int ansisql_version; // which version of ANSI SQL output to use
   time_t since;     // no feed items older than since
   int fixdate;
   int csv_separator;
@@ -78,19 +65,14 @@ typedef struct
   int strip_desc;
   int strip_lf;
   int strip_whitespace;
+  const char *strip_filter;
 
 //  char property[FILENAME_MAX];
-  char template[FILENAME_MAX];
+  char template_file[FILENAME_MAX];
   char temp_file[FILENAME_MAX];
   FILE *input_file;
   FILE *log;
   int get_flags;
-
-#if 0
-  char new_only_dir[FILENAME_MAX]; // directory used to store lists of hashes
-  st_rsstool_olditems_t old_urls;  // of old items, empty if not used
-  st_rsstool_olditems_t old_titles;
-#endif
 
   st_rsstool_item_t *item[RSSTOOL_MAXITEM];
   int item_count;

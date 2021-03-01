@@ -20,13 +20,19 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 #ifndef MISC_PROPERTY_H
 #define MISC_PROPERTY_H
-
-#ifdef  HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #ifdef  __cplusplus
 extern "C" {
+#endif
+
+
+#if     (defined __unix__ && !defined __MSDOS__) || defined __BEOS__ || \
+        defined AMIGA || defined __APPLE__      // Mac OS X actually
+// GNU/Linux, Solaris, FreeBSD, OpenBSD, Cygwin, BeOS, Amiga, Mac (OS X)
+#define FILE_SEPARATOR '/'  
+#define FILE_SEPARATOR_S "/"
+#else // DJGPP, Win32
+#define FILE_SEPARATOR '\\'  
+#define FILE_SEPARATOR_S "\\"
 #endif
 
 
@@ -38,8 +44,11 @@ typedef struct
 } st_property_t;                                // NAME=VALUE
 
 
+#define PROPERTY_ESCAPE '\\'
 #define PROPERTY_SEPARATOR '='
 #define PROPERTY_SEPARATOR_S "="
+//#define PROPERTY_ENCLOSURE '"'
+//#define PROPERTY_ENCLOSURE_S "\""
 #define PROPERTY_COMMENT '#'
 #define PROPERTY_COMMENT_S "#"
 
@@ -53,22 +62,7 @@ typedef struct
                            1 == property file needs update; set_property() and
                                 set_property_array() must be used to update it
 
-  get_property_from_string()
-                         parse a property from a string where the property
-                         (prop_sep) and the comment separators can (must)
-                         be specified. This is useful for parsing a lot of
-                         things like http headers or property files with
-                         different separators
-
-  get_property()       get value of propname from filename or return value
-                         of env with name like propname
-                       mode:
-                         PROPERTY_MODE_TEXT   return value as normal text
-                         PROPERTY_MODE_FILENAME return value as filename
-                                                  i.e., it runs realpath2()
-                                                  on the filename and fixes
-                                                  the characters if necessary
-                                                                      (Cygwin)
+  get_property()       get value of propname from filename
   get_property_int()   like get_property() but returns an integer which is 0
                          if the value of propname was 0, [Nn] or [Nn][Oo]
                          and an integer or at least 1 for every other case
@@ -102,21 +96,16 @@ typedef struct
 
 extern int property_check (const char *filename, int version, int verbose);
 
-extern const char *get_property_from_string (char *str, const char *propname,
-                                             const char prop_sep, const char comment_sep);
-
-#define PROPERTY_MODE_TEXT 0
-#define PROPERTY_MODE_FILENAME 1
-extern const char *get_property (const char *filename, const char *propname, int mode);
-extern unsigned long get_property_int (const char *filename, const char *propname);
+extern const char *get_property (const char *filename, const char *propname);
+extern signed long int get_property_int (const char *filename, const char *propname);
 
 extern int set_property (const char *filename, const char *propname,
                          const char *value, const char *comment);
 extern int set_property_int (const char *filename, const char *propname,
-                             unsigned long value, const char *comment);
+                             signed long int value, const char *comment);
 extern int set_property_array (const char *filename, const st_property_t *prop);
 
-#define DELETE_PROPERTY(a, b) (set_property(a, b, NULL, NULL))
+#define DELETE_PROPERTY(a,b) (set_property(a, b, NULL, NULL))
 
 
 #ifdef  __cplusplus

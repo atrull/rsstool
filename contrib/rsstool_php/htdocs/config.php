@@ -1,5 +1,6 @@
+<?php
 /*
-base64.h - base64 codec
+config.php - configuration file for rsstool PHP example
 
 Copyright (c) 2006 NoisyB
 
@@ -18,12 +19,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
-#ifndef MISC_BASE64_H
-#define MISC_BASE64_H
 
 
-extern char *base64_enc (const char *src, int add_linefeeds);
-extern void base64_dec (char *dst, const char *src, int maxlength);
+$dbhost = 'localhost';
+$dbuser = 'root';
+$dbpass = '';
+$dbname = 'rsstool';
 
-
-#endif
+?>

@@ -21,11 +21,8 @@ include config.mak
 
 OBJECTS=$(TARGET).o rsstool_misc.o rsstool_write.o \
 	misc/base64.o misc/getopt.o misc/getopt2.o \
-	misc/net.o misc/string.o misc/file.o misc/hash.o misc/hash_crc.o misc/hash_md5.o \
+	misc/net.o misc/string.o misc/file.o misc/hash.o misc/crc32.o misc/md5.o \
 	misc/misc.o misc/rss.o misc/sql.o misc/xml.o
-ifdef USE_HACKS
-OBJECTS+=hack/google.o hack/google_news.o hack/troll.o hack/youtube.o hack/xxx.o #hack/digg.o hack/slashdot.o
-endif
 ifdef USE_ZLIB
 OBJECTS+=misc/unzip.o #misc/zip.o
 endif
@@ -42,7 +39,6 @@ all: $(TARGET)
 
 clean:
 	rm -f $(TARGET) $(OBJECTS) *.core *.stackdump *~ */*~ */*/*~
-	rm -Rf rsstool.plg rsstool.ncb rsstool.dep rsstool.mak Debug Release *.obj */*.obj
 
 
 distclean: clean

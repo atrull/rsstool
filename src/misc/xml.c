@@ -30,6 +30,8 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #elif   defined USE_XML2
 #include <libxml/parser.h>
 #include <libxml/tree.h>
+#include <libxml/xpath.h>
+#include <libxml/xpathInternals.h>
 #endif
 #include "string.h"
 #include "xml.h"
@@ -41,13 +43,171 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #define MAXBUFSIZE 32768
 
 
+#ifdef  USE_XML2
+xmlDocPtr
+xml_xpath_open (const char *fname)
+{
+  xmlDocPtr doc;
+
+  xmlInitParser ();
+  LIBXML_TEST_VERSION
+
+  if (!(doc = xmlParseFile (fname)))
+    {
+      fprintf (stderr, "ERROR: unable to parse file \"%s\"\n", fname);
+      return NULL;
+    }
+
+  return doc;
+}
+
+
+xmlDocPtr
+xml_xpath_string (const char *s)
+{
+  const char *encoding = NULL;
+  xmlDocPtr doc;
+
+  xmlInitParser ();
+  LIBXML_TEST_VERSION
+
+  if (!(doc = xmlReadMemory (s, strlen (s), "", encoding, 0)))
+    { 
+      fprintf (stderr, "ERROR: unable to parse string\n");
+      return NULL;
+    }
+
+  return doc;   
+}
+
+
+const char *
+xml_xpath (xmlDocPtr doc, const char *xpath_expr)
+{
+  int size;
+  int i;
+  const xmlChar *p = NULL;
+  xmlNodeSetPtr nodes;
+  xmlXPathContextPtr xpathCtx;
+  xmlXPathObjectPtr xpathObj;
+
+  if (!(xpathCtx = xmlXPathNewContext (doc)))
+    {
+      fprintf (stderr, "ERROR: unable to create new XPath context\n");
+      xmlFreeDoc (doc);
+      return NULL;
+    }
+
+  if (!(xpathObj = xmlXPathEvalExpression ((const xmlChar *) xpath_expr, xpathCtx)))
+    {
+      fprintf (stderr, "ERROR: unable to evaluate xpath expression \"%s\"\n", xpath_expr);
+      xmlXPathFreeContext (xpathCtx);
+      xmlFreeDoc (doc);
+      return NULL;
+    }
+
+  nodes = xpathObj->nodesetval;
+  size = (nodes) ? nodes->nodeNr : 0;
+
+  for (i = size - 1; i >= 0; i--)
+    {
+      p = xmlNodeGetContent (nodes->nodeTab[i]);
+#ifdef  DEBUG
+      printf (p);
+      fflush (stdout);
+#endif
+      if (nodes->nodeTab[i]->type != XML_NAMESPACE_DECL)
+        nodes->nodeTab[i] = NULL;
+    }
+
+  xmlXPathFreeObject (xpathObj);
+
+  xmlXPathFreeContext (xpathCtx);
+
+  return (const char *) p;
+}
+
+
+void
+xml_xpath_close (xmlDocPtr doc)
+{
+//    xmlDocDump(stdout, doc);
+
+  xmlFreeDoc (doc);   
+  xmlCleanupParser ();
+}
+
+
+const char *
+xml_xpath_once (const char *fname, const char *xpath_expr)
+{
+  int size;
+  int i;
+  const xmlChar *p = NULL;
+  xmlNodeSetPtr nodes;
+  xmlDocPtr doc;
+  xmlXPathContextPtr xpathCtx;
+  xmlXPathObjectPtr xpathObj;
+
+  xmlInitParser ();
+  LIBXML_TEST_VERSION
+
+  if (!(doc = xmlParseFile (fname)))
+    {
+      fprintf (stderr, "ERROR: unable to parse file \"%s\"\n", fname);
+      return NULL;
+    }
+
+  if (!(xpathCtx = xmlXPathNewContext (doc)))
+    {
+      fprintf (stderr, "ERROR: unable to create new XPath context\n");
+      xmlFreeDoc (doc);
+      return NULL;
+    }
+
+  if (!(xpathObj = xmlXPathEvalExpression ((const xmlChar *) xpath_expr, xpathCtx)))
+    {
+      fprintf (stderr, "ERROR: unable to evaluate xpath expression \"%s\"\n", xpath_expr);
+      xmlXPathFreeContext (xpathCtx);
+      xmlFreeDoc (doc);
+      return NULL;
+    }
+
+  nodes = xpathObj->nodesetval;
+  size = (nodes) ? nodes->nodeNr : 0;
+
+  for (i = size - 1; i >= 0; i--)
+    {
+      p = xmlNodeGetContent (nodes->nodeTab[i]);
+#ifdef  DEBUG
+      printf (p);
+      fflush (stdout);
+#endif
+      if (nodes->nodeTab[i]->type != XML_NAMESPACE_DECL)
+        nodes->nodeTab[i] = NULL;
+    }
+
+  xmlXPathFreeObject (xpathObj);
+  xmlXPathFreeContext (xpathCtx);
+
+//    xmlDocDump(stdout, doc);
+
+  xmlFreeDoc (doc);
+  xmlCleanupParser ();
+
+  return (const char *) p;
+}
+#endif  // USE_XML2
+
+
 xml_doc_t *
-xml_parse (const char *fname)
+xml_parse (const char *fname, const char *encoding)
 {
 #ifdef  USE_NXML
   return nxmle_new_data_from_file ((char *) fname, NULL);
 #elif   defined USE_XML2
-  return xmlParseFile (fname);
+//  return xmlParseFile (fname);
+  return xmlReadFile (fname, encoding, 0); // XML_PARSE_RECOVER);
 #endif
 }
 
@@ -181,7 +341,7 @@ xml_tag_get_name (const char *tag)
   static char buf[MAXBUFSIZE];
   char *p = NULL;
 
-  p = strchr (tag, '<');
+  p = strchr ((char *) tag, '<');
   if (!p)
     return NULL;
 
@@ -302,7 +462,7 @@ xml_tag_filter (char *str, st_tag_filter_t *f, unsigned long continuous_flag)
               // run filter
               for (i = 0; f[i].filter; i++)
                 if (!(*(f[i].start_tag)) || // empty tag overrides all
-                    !stricmp (xml_tag_get_name (tag_full), f[i].start_tag))
+                    !strcasecmp (xml_tag_get_name (tag_full), f[i].start_tag))
                   {
                     const char *rep = NULL;
 
@@ -310,7 +470,6 @@ xml_tag_filter (char *str, st_tag_filter_t *f, unsigned long continuous_flag)
                     fputs (f[i].start_tag, stderr);
                     fflush (stderr);
 #endif
-
                     rep = f[i].filter (tag_full);
                     if (rep)
                       {

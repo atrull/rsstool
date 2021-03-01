@@ -25,7 +25,6 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include "misc/defines.h"
 #include "misc/net.h"
 #include "misc/xml.h"
 #include "misc/string.h"
@@ -36,6 +35,14 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #include "rsstool.h"
 #include "rsstool_misc.h"
 #include "rsstool_write.h"
+
+
+#ifndef MAX
+#define MAX(a,b) ((a) > (b) ? (a) : (b))
+#endif
+#ifndef MIN
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#endif
 
 
 static int current_item = 0; // used by rsstool_write_template2
@@ -106,21 +113,33 @@ get_item_value (const char *tag)
 static const char *
 template_url_filter (const char *s)
 {
-  return rsstool.item[get_item_value (s)]->url;
+  st_rsstool_item_t *item = rsstool.item[get_item_value (s)];
+
+  if (item)
+    return item->url;
+  return "";
 }
 
 
 static const char *
 template_site_filter (const char *s)
 {
-  return rsstool.item[get_item_value (s)]->site;
+  st_rsstool_item_t *item = rsstool.item[get_item_value (s)]; 
+
+  if (item)
+    return item->site;
+  return "";
 }
 
 
 static const char *
 template_feed_url_filter (const char *s)
 {
-  return rsstool.item[get_item_value (s)]->feed_url;
+  st_rsstool_item_t *item = rsstool.item[get_item_value (s)]; 
+
+  if (item)
+    return item->feed_url;
+  return "";
 }
 
 
@@ -143,14 +162,22 @@ template_date_filter (const char *s)
 static const char *
 template_title_filter (const char *s)
 {
-  return rsstool.item[get_item_value (s)]->title;
+  st_rsstool_item_t *item = rsstool.item[get_item_value (s)]; 
+
+  if (item)
+    return item->title;
+  return "";
 }
 
 
 static const char *
 template_desc_filter (const char *s)
 {
-  return rsstool.item[get_item_value (s)]->desc;
+  st_rsstool_item_t *item = rsstool.item[get_item_value (s)]; 
+
+  if (item)
+    return item->desc;
+  return "";
 }
 
 
@@ -245,7 +272,7 @@ static st_tag_filter_t f[] = {
 
 
 int
-rsstool_write_template (st_rsstool_t *rt, const char *template)
+rsstool_write_template (st_rsstool_t *rt, const char *template_file)
 {
 #ifndef _WIN32
   (void) rt;
@@ -255,7 +282,7 @@ rsstool_write_template (st_rsstool_t *rt, const char *template)
   FILE *fh = NULL;
   int cf = 0;
 
-  if (!(fh = fopen (template, "r")))
+  if (!(fh = fopen (template_file, "r")))
     return -1;
 
   while (fgets (buf, MAXBUFSIZE, fh))
@@ -293,7 +320,7 @@ rsstool_write_template_s (st_rsstool_t *rt, const char *template_s)
 
 
 int
-rsstool_write_template2 (st_rsstool_t *rt, const char *template)
+rsstool_write_template2 (st_rsstool_t *rt, const char *template_file)
 {
 #ifndef _WIN32
   (void) rt;
@@ -303,7 +330,7 @@ rsstool_write_template2 (st_rsstool_t *rt, const char *template)
   int cf, i = 0;
   int items = rsstool_get_item_count (rt);
 
-  if (!(fh = fopen (template, "r")))
+  if (!(fh = fopen (template_file, "r")))
     return -1;
 
   for (; i < items; i++)
@@ -566,7 +593,7 @@ rsstool_write_rss (st_rsstool_t *rt, int version)
   rss.version = version;
   strcpy (rss.title, "RSStool");
   strcpy (rss.url, "http://rsstool.berlios.de");
-  strcpy (rss.desc, "read, parse, merge and write RSS (and Atom) feeds");
+  strcpy (rss.desc, "read, parse, merge and write RSS and Atom feeds");
 
   for (; i < rsstool_get_item_count (rt) && i < RSSMAXITEM; i++)
     {
@@ -574,6 +601,7 @@ rsstool_write_rss (st_rsstool_t *rt, int version)
       strncpy (rss.item[i].url, rt->item[i]->url, RSSTOOL_MAXBUFSIZE)[RSSTOOL_MAXBUFSIZE - 1] = 0;
       strncpy (rss.item[i].desc, rt->item[i]->desc, RSSTOOL_MAXBUFSIZE)[RSSTOOL_MAXBUFSIZE - 1] = 0;
       rss.item[i].date = rt->item[i]->date;
+      rss.item[i].media_duration = rt->item[i]->media_duration;
       rss.item_count++;
     }
 
@@ -599,9 +627,9 @@ rsstool_write_ansisql (st_rsstool_t *rt)
   int items = rsstool_get_item_count (rt);
   int i = 0;
 
-  fputs ("--------------------------------------------------------------\n"
-         "-- RSStool - read, parse, merge and write RSS (and Atom) feeds\n"
-         "--------------------------------------------------------------\n"
+  fputs ("-- -----------------------------------------------------------\n"
+         "-- RSStool - read, parse, merge and write RSS and Atom feeds\n"
+         "-- -----------------------------------------------------------\n"
          "\n"
          "-- DROP TABLE IF EXISTS `rsstool_table`;\n"
          "-- CREATE TABLE `rsstool_table` (\n"
@@ -618,6 +646,8 @@ rsstool_write_ansisql (st_rsstool_t *rt)
          "--   `rsstool_desc` text NOT NULL,\n"
          "--   `rsstool_date` bigint(20) unsigned NOT NULL default '0',\n"
          "--   `rsstool_dl_date` bigint(20) unsigned NOT NULL default '0',\n"
+//         "--   `rsstool_keywords` text NOT NULL,\n"
+         "--   `rsstool_media_duration` bigint(20) unsigned NOT NULL default '0',\n"
          "--   UNIQUE KEY `rsstool_url_crc32` (`rsstool_url_crc32`),\n"
          "--   UNIQUE KEY `rsstool_url_md5` (`rsstool_url_md5`),\n"
          "--   UNIQUE KEY `rsstool_title_crc32` (`rsstool_title_crc32`),\n"
@@ -644,15 +674,19 @@ rsstool_write_ansisql (st_rsstool_t *rt)
                " `rsstool_url`, `rsstool_url_md5`, `rsstool_url_crc32`,"
                " `rsstool_date`,"
                " `rsstool_title`, `rsstool_title_md5`, `rsstool_title_crc32`,"
-               " `rsstool_desc`"
-               ") VALUES ("
+               " `rsstool_desc`,"
+//               " `rsstool_keywords`,"
+               " `rsstool_media_duration`"
+               " ) VALUES ("
                " '%s', '%s', '%u',"
                " '%ld', '%s',"
                " '%s', '%s', '%u',"
                " '%ld',"
                " '%s', '%s', '%u',"
-               " '%s'"
-               ");\n",
+               " '%s',"
+//               " '%s',"
+               " '%d'"
+              ");\n",
         sql_stresc (rt->item[i]->feed_url),
         hash_get_s (dl_url_h, HASH_MD5),
         hash_get_crc32 (dl_url_h),
@@ -665,165 +699,24 @@ rsstool_write_ansisql (st_rsstool_t *rt)
         sql_stresc (rt->item[i]->title),
         hash_get_s (title_h, HASH_MD5),
         hash_get_crc32 (title_h),
-        sql_stresc (rt->item[i]->desc));
-
-      hash_close (dl_url_h);
-      hash_close (url_h);
-      hash_close (title_h);
-    }
-
-  return 0;
-}
-
-
-int
-rsstool_write_ansisql_092 (st_rsstool_t *rt)
-{
-  int items = rsstool_get_item_count (rt);
-  int i = 0;
-
-  fputs ("--------------------------------------------------------------\n"
-          "-- RSStool - read, parse, merge and write RSS (and Atom) feeds\n"
-          "--------------------------------------------------------------\n"
-          "\n"
-          "-- DROP TABLE rsstool_table;\n"
-          "-- CREATE TABLE rsstool_table\n"
-          "-- (\n"
-          "--   rsstool_site      blob,\n"
-          "--   rsstool_title     blob,\n"
-          "--   rsstool_url       blob,\n"
-          "--   rsstool_date      int(11),\n"
-          "--   rsstool_desc      blob\n"
-          "-- );\n"
-          "\n", rsstool.output_file);
-
-  for (; i < items; i++)
-    {
-      fprintf (rsstool.output_file, "INSERT IGNORE INTO rsstool_table (rsstool_site, rsstool_title, rsstool_url, rsstool_date, rsstool_desc) VALUES (\"%s\", \"%s\", \"%s\", %ld, \"%s\");\n",
-        sql_stresc (rt->item[i]->site),
-        sql_stresc (rt->item[i]->title),
-        sql_stresc (rt->item[i]->url),
-        rt->item[i]->date,
-        sql_stresc (rt->item[i]->desc));
-    }
-
-  return 0;
-}
-
-
-int
-rsstool_write_ansisql_094 (st_rsstool_t *rt)
-{
-  st_hash_t *h = NULL;
-  int items = rsstool_get_item_count (rt);
-  int i = 0;
-
-  fputs ("--------------------------------------------------------------\n"
-         "-- RSStool - read, parse, merge and write RSS (and Atom) feeds\n"
-         "--------------------------------------------------------------\n"
-         "\n"
-         "-- DROP TABLE IF EXISTS `rsstool_table`;\n"
-         "-- CREATE TABLE IF NOT EXISTS `rsstool_table`\n"
-         "-- (\n"
-         "--   `rsstool_dl_url`     text,\n"
-         "--   `rsstool_dl_date`    int(11),\n"
-         "--   `rsstool_site`       text,\n"
-         "--   `rsstool_url`        text,\n"
-         "--   `rsstool_url_md5`    varchar(32),\n"
-         "--   `rsstool_url_crc32`  varchar(8),\n"
-         "--   `rsstool_date`       int(11),\n"
-         "--   `rsstool_title`      text,\n"
-         "--   `rsstool_desc`       text,\n"
-         "--   UNIQUE KEY           `rsstool_url_md5` (`rsstool_url_md5`)\n"
-         "-- );\n"
-         "\n", rsstool.output_file);
-
-  for (; i < items; i++)
-    {
-      h = hash_open (HASH_MD5|HASH_CRC32);
-      h = hash_update (h, (const unsigned char *) rt->item[i]->url, strlen (rt->item[i]->url));
-//      h = hash_update (h, (const unsigned char *) rt->item[i]->title, strlen (rt->item[i]->title));
-
-      fprintf (rsstool.output_file, "INSERT IGNORE INTO `rsstool_table` (`rsstool_dl_url`, `rsstool_dl_date`, `rsstool_site`, `rsstool_url`,"
-              " `rsstool_url_md5`, `rsstool_url_crc32`, `rsstool_date`, `rsstool_title`, `rsstool_desc`)"
-              " VALUES ('%s', '%ld', '%s', '%s', '%s', '%x', '%ld', '%s', '%s')"
-              ";\n",
-        sql_stresc (rt->item[i]->feed_url),
-        time (0),
-        sql_stresc (rt->item[i]->site),
-        sql_stresc (rt->item[i]->url),
-        hash_get_s (h, HASH_MD5),
-        hash_get_crc32 (h),
-        rt->item[i]->date,
-        sql_stresc (rt->item[i]->title),
-        sql_stresc (rt->item[i]->desc));
-
-      hash_close (h);
-    }
-
-  return 0;
-}
-
-
-int
-rsstool_write_ansisql_095 (st_rsstool_t *rt)
-{
-  st_hash_t *url_h = NULL;
-  st_hash_t *title_h = NULL;
-  int items = rsstool_get_item_count (rt);
-  int i = 0;
-
-  fputs ("--------------------------------------------------------------\n"
-         "-- RSStool - read, parse, merge and write RSS (and Atom) feeds\n"
-         "--------------------------------------------------------------\n"
-         "\n"
-         "-- DROP TABLE IF EXISTS `rsstool_table`;\n"
-         "-- CREATE TABLE IF NOT EXISTS `rsstool_table`\n"
-         "-- (\n"
-         "--   `rsstool_dl_url`     text,\n"
-         "--   `rsstool_dl_date`    int(11),\n"
-         "--   `rsstool_site`       text,\n"
-         "--   `rsstool_url`        text,\n"
-         "--   `rsstool_url_md5`    varchar(32),\n"
-         "--   `rsstool_url_crc32`  varchar(8),\n"
-         "--   `rsstool_date`       int(11),\n"
-         "--   `rsstool_title`      text,\n"
-         "--   `rsstool_title_md5`  varchar(32),\n"
-         "--   `rsstool_title_crc32`varchar(8),\n"
-         "--   `rsstool_desc`       text,\n"
-         "--   UNIQUE KEY           `rsstool_url_md5` (`rsstool_url_md5`),\n"
-         "--   UNIQUE KEY           `rsstool_url_crc32` (`rsstool_url_crc32`),\n"
-         "--   UNIQUE KEY           `rsstool_title_md5` (`rsstool_title_md5`),\n"
-         "--   UNIQUE KEY           `rsstool_title_crc32` (`rsstool_title_crc32`)\n"
-         "-- );\n"
-         "\n", rsstool.output_file);
-
-  for (; i < items; i++)
-    {
-      url_h = hash_open (HASH_MD5|HASH_CRC32);
-      title_h = hash_open (HASH_MD5|HASH_CRC32);
-
-      url_h = hash_update (url_h, (const unsigned char *) rt->item[i]->url, strlen (rt->item[i]->url));
-      title_h = hash_update (title_h, (const unsigned char *) rt->item[i]->title, strlen (rt->item[i]->title));
+        sql_stresc (rt->item[i]->desc),
+//        sql_stresc (rt->item[i]->keywords),
+        rt->item[i]->media_duration);
 
       fprintf (rsstool.output_file,
-               "INSERT IGNORE INTO `rsstool_table` (`rsstool_dl_url`, `rsstool_dl_date`, `rsstool_site`, `rsstool_url`,"
-               " `rsstool_url_md5`, `rsstool_url_crc32`, `rsstool_date`, `rsstool_title`, `rsstool_title_md5`,"
-               " `rsstool_title_crc32`, `rsstool_desc`)"
-               " VALUES ('%s', '%ld', '%s', '%s', '%s', '%x', '%ld', '%s', '%s', '%x', '%s')"
+               "-- just update if row exists\n"
+               "-- UPDATE `rsstool_table` SET "
+               " `rsstool_title` = '%s', `rsstool_title_md5` = '%s', `rsstool_title_crc32` = %u,"
+               " `rsstool_desc` = '%s'"
+               " WHERE `rsstool_url_crc32` = %u"
                ";\n",
-        sql_stresc (rt->item[i]->feed_url),
-        time (0),
-        sql_stresc (rt->item[i]->site),
-        sql_stresc (rt->item[i]->url),
-        hash_get_s (url_h, HASH_MD5),
-        hash_get_crc32 (url_h),
-        rt->item[i]->date,
         sql_stresc (rt->item[i]->title),
         hash_get_s (title_h, HASH_MD5),
         hash_get_crc32 (title_h),
-        sql_stresc (rt->item[i]->desc));
+        sql_stresc (rt->item[i]->desc),
+        hash_get_crc32 (url_h));
 
+      hash_close (dl_url_h);
       hash_close (url_h);
       hash_close (title_h);
     }
@@ -840,9 +733,9 @@ rsstool_write_ansisql_joomla (st_rsstool_t *rt)
   int items = rsstool_get_item_count (rt);
   int i = 0;
 
-  fputs ("--------------------------------------------------------------\n"
-         "-- RSStool - read, parse, merge and write RSS (and Atom) feeds\n"
-         "--------------------------------------------------------------\n"
+  fputs ("-- -----------------------------------------------------------\n"
+         "-- RSStool - read, parse, merge and write RSS and Atom feeds\n"
+         "-- -----------------------------------------------------------\n"
          "\n"
          "-- DROP TABLE IF EXISTS `jos_content`;\n"
          "-- CREATE TABLE IF NOT EXISTS `jos_content`\n"
@@ -946,9 +839,9 @@ rsstool_write_ansisql_dragonfly (st_rsstool_t *rt)
   int items = rsstool_get_item_count (rt);
   int i = 0;
 
-  fputs ("--------------------------------------------------------------\n"
-         "-- RSStool - read, parse, merge and write RSS (and Atom) feeds\n"
-         "--------------------------------------------------------------\n"
+  fputs ("-- -----------------------------------------------------------\n"
+         "-- RSStool - read, parse, merge and write RSS and Atom feeds\n"
+         "-- -----------------------------------------------------------\n"
          "\n"
          "-- DROP TABLE IF EXISTS `jos_content`;\n"
          "-- CREATE TABLE IF NOT EXISTS `cms_stories`\n"
@@ -1019,104 +912,3 @@ rsstool_write_ansisql_dragonfly (st_rsstool_t *rt)
 }
 
 
-#if     (defined USE_MYSQL || defined USE_ODBC)
-static int
-rsstool_db_url_validate (st_strurl_t *url)
-{
-  if (!(*url->request))
-    {
-      fputs ("You have to specify a database (URL syntax: user:passwd@host:port/database)\n", stderr);
-      return -1;
-    }
-
-  fputs ("Connecting to ", stderr);
-
-  if (!(*url->user))
-    strcpy (url->user, "admin");
-  fputs (url->user, stderr);
-
-  if (*url->pass)
-    fprintf (stderr, ":%s", url->pass);
-
-  if (!(*url->host))
-    strcpy (url->host, "localhost");
-  fprintf (stderr, "@%s", url->host);
-
-  if (url->port < 1)
-    url->port = 3306; // default
-  fprintf (stderr, ":%d%s", url->port, url->request);
- 
-  fputs (" ... ", stderr);
-
-  return 0;
-}
-#endif
-
-
-#ifdef  USE_MYSQL
-int
-rsstool_write_mysql (st_rsstool_t *rt)
-{
-  st_sql_t *sql = NULL;
-  st_strurl_t url;
-  char buf[MAXBUFSIZE];
-
-  strurl (&url, rt->dburl);
-
-  if (rsstool_db_url_validate (&url) == -1)
-    return -1;
-
-  strtrim_s (url.request, "/", NULL);
-
-  if (!(sql = sql_open (url.host, url.port, url.request, url.user, url.pass, SQL_MYSQL)))
-    {
-      fputs ("FAILED\n", stderr);
-      return -1;
-    }
-
-  fputs ("OK\n", stderr);
-
-  sql_query (sql, "DROP TABLE IF EXISTS rsstool_table");
-
-  while (sql_gets (sql, buf, MAXBUFSIZE))
-    {
-      fputs (buf, stdout);
-      fputc ('\n', stdout);
-    }
-
-  sql_close (sql);
-
-  return 0;
-}
-#endif
-
-
-#ifdef  USE_ODBC
-int
-rsstool_write_odbc (st_rsstool_t *rt)
-{
-  st_sql_t *sql = NULL;
-  st_strurl_t url;
-
-  strurl (&url, rt->dburl);
-
-  if (rsstool_db_url_validate (&url) == -1)
-    return -1;
-
-  strtrim_s (url.request, "/", NULL);
-
-  if (!(sql = sql_open (url.host, url.port, url.request, url.user, url.pass, SQL_ODBC)))
-    {
-      fputs ("FAILED\n", stderr);
-      return -1;
-    }
-
-  fputs ("OK\n", stderr);
-
-  sql_query (sql, "SELECT * FROM user");
-
-  sql_close (sql);
-
-  return 0;
-}
-#endif

@@ -1,5 +1,5 @@
 /*
-rsstool.c - RSStool reading, parsing and writing RSS (and ATOM) feeds
+rsstool.c - RSStool reading, parsing and writing RSS and Atom feeds
 
 Copyright (c) 2006 NoisyB
 
@@ -27,28 +27,17 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #ifdef  HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#include <time.h>
 #include "misc/string.h"
 #include "misc/getopt2.h"
 #include "misc/misc.h"
 #include "misc/net.h"
 #include "misc/rss.h"
-#include "misc/hash_crc.h"
+#include "misc/crc32.h"
 #include "rsstool_defines.h"
 #include "rsstool.h"
 #include "rsstool_misc.h"
 #include "rsstool_write.h"
-
-
-// hacks
-#ifdef  USE_HACKS
-#include "hack/xxx.h"
-#include "hack/troll.h"
-#include "hack/youtube.h"
-#include "hack/google.h"
-#include "hack/google_news.h"
-//#include "hack/digg.h"
-//#include "hack/slashdot.h"
-#endif
 
 
 st_rsstool_t rsstool;
@@ -114,15 +103,15 @@ main (int argc, char **argv)
   const st_getopt2_t options[] = {
     {
       NULL,      0, 0, 0, NULL,
-      "rsstool " RSSTOOL_VERSION_S " " CURRENT_OS_S " 2006 by NoisyB\n"
+      "rsstool " RSSTOOL_VERSION_S " " CURRENT_OS_S " 2006-2010 by NoisyB\n"
       "This may be freely redistributed under the terms of the GNU Public License\n\n"
       "Usage: rsstool [OPTION] FILE(S)... URL(S)...\n"
     },
     {
       NULL,      0, 0, 0,
-      NULL,   "Read, parse, merge and write RSS (and ATOM) feeds\n"
-              "\nSupports: RSS 0.9x, 1.0, 2.0 and ATOM 0.1, 0.2, 0.3\n"
-              "\nThe RSS (or ATOM) feeds will be merged and re-sorted if you enter more than\n"
+      NULL,   "Read, parse, merge and write RSS and Atom feeds\n"
+              "\nSupports: RSS 0.9x, 1.0, 2.0 and Atom 0.1, 0.2, 0.3, 1.0\n"
+              "\nThe RSS or Atom feeds will be merged and re-sorted if you enter more than\n"
               "one URL or FILEname\n"
     },
     {
@@ -139,16 +128,10 @@ main (int argc, char **argv)
       NULL, "use gzip compression for downloading"
     },
 #endif
-#ifdef  USE_CURL
+#ifdef  USE_CURL  
     { 
       "curl", 0, 0, RSSTOOL_CURL,
-      NULL, "use libcURL for downloading"
-    },
-#endif
-#if 1
-    {
-      "wget", 0, 0, RSSTOOL_WGET,
-      NULL, "launch wget for downloading"
+      NULL, NULL
     },
 #endif
     {
@@ -160,16 +143,13 @@ main (int argc, char **argv)
       "FILE", "same as " OPTION_LONG_S "input-file"
     },
     {
+      "parse",   1, 0, RSSTOOL_PARSE,
+      "FILE|URL", "generate RSS feed from random HTML document"
+    },
+    {
       "log", 1, 0, RSSTOOL_LOG,
       "FILE", "write a log to FILE (including HTTP headers)"
     },
-#ifdef  USE_POST1_0
-    {
-      "new-only", 1, 0, RSSTOOL_NEW_ONLY,
-      "DIR",  "output only new items; use DIR to store lists of already\n"
-              "downloaded feed items"
-    },
-#endif
     {
       "since", 1, 0, RSSTOOL_SINCE,
       "DATE",  "pass only items (of feeds) newer than DATE\n"
@@ -181,6 +161,10 @@ main (int argc, char **argv)
     {
       "fixdate", 0, 0, RSSTOOL_FIXDATE,
       NULL,  "missing dates will be replaced with the current date"
+    },
+    {
+      "enc", 1, 0, RSSTOOL_ENC,
+      "ENCODING", "overrides the encoding specified in RSS header"
     },
     {
       "version", 0, 0, RSSTOOL_VER,
@@ -207,6 +191,16 @@ main (int argc, char **argv)
     {
       NULL, 0, 0, 0,
       NULL,   "\nStrip & Sort"
+    },
+    {
+      "filter", 1, 0, RSSTOOL_FILTER,
+      "LOGIC", "sometimes referred to as implied Boolean LOGIC, in which\n"
+               "+ stands for AND\n"
+               "- stands for NOT\n"
+               "no operator implies OR\n"
+               "use this to remove items from the RSS feed before output\n"
+               "(nested) parentheses are not supported\n"
+               "Example: --filter=\"+important -unimportant\""
     },
     {
       "shtml",        0, 0, RSSTOOL_SHTML,
@@ -245,6 +239,10 @@ main (int argc, char **argv)
     {
       "1",       0, 0, RSSTOOL_SDESC,
       NULL, NULL
+    },
+    {
+      "nosort",        0, 0, RSSTOOL_NOSORT,
+      NULL,   "do not sort items by date (default: on)"
     },
     {
       "r",        0, 0, RSSTOOL_REVERSE,
@@ -307,7 +305,7 @@ main (int argc, char **argv)
     },
     {
       "template", 1, 0, RSSTOOL_TEMPLATE,
-      "FILE|URL",   "parse template file and replace tags with content\n"  
+      "FILE",   "parse template file and replace tags with content\n"  
                     "Tags: \"<rsstool:url item=NUM>\"   url/link of item NUM\n"
                     "      \"<rsstool:title item=NUM>\" title of item NUM\n"
                     "      \"<rsstool:desc item=NUM>\"  description of item\n"
@@ -330,34 +328,27 @@ main (int argc, char **argv)
     },
     {
       "template2", 1, 0, RSSTOOL_TEMPLATE2,
-      "FILE|URL",   "same as " OPTION_LONG_S "template but repeats the whole\n"
+      "FILE",   "same as " OPTION_LONG_S "template but repeats the whole\n"
                     "template for every single item"
     },
-#ifdef  USE_MYSQL
     {
-      "mysql", 1, 0, RSSTOOL_MYSQL,
-      "URL",   "write direct to MySQL DB using MySQL API\n"
-               "URL syntax: user:passwd@host:port/database"
-    },
-#endif
-#ifdef  USE_ODBC
-    {
-      "odbc", 1, 0, RSSTOOL_ODBC,
-      "URL",   "write direct to DB using ODBC\n"
-               "URL syntax: user:passwd@host:port/database"
-    },
-#endif
-    {
-      "sql", 2, 0, RSSTOOL_SQL,
-      "VALUE",   "output as ANSI SQL script\n"
+      "sql", 0, 0, RSSTOOL_SQL,
+      NULL,   "output as ANSI SQL script"
+#if 0
+                 // deprecated
                  "VALUE=092       RSStool 0.9.2 db format\n"
                  "VALUE=094       RSStool 0.9.4 db format\n"
                  "VALUE=095       RSStool 0.9.5 db format\n"
                  "VALUE=\"current\" use current db format (default)"
+#endif
     },
     {
       "sqlold", 0, 0, RSSTOOL_SQLOLD,
-      NULL,   "same as " OPTION_LONG_S "sql=095"
+      NULL,   NULL
+    },
+    {
+      NULL, 0, 0, 0,
+      NULL,   "\nDeprecated"
     },
     {
       "joomla", 0, 0, RSSTOOL_JOOMLA,
@@ -367,76 +358,6 @@ main (int argc, char **argv)
       "dragonfly", 0, 0, RSSTOOL_DRAGONFLY,
       NULL,   "output as ANSI SQL script for import into Dragonfly CMS"
     },
-#if 0
-    {
-      "irc", 1, 0, RSSTOOL_IRC,
-      "URL",  "output to IRC channel\n"
-              "e.g. " OPTION_LONG_S "irc=\"irc.server.org/#channel\""
-    }
-#endif
-#ifdef  USE_HACKS
-    {
-      NULL,      0, 0, 0,
-      NULL,   "\nHacks\n"
-              "generate RSS feed from HTML code of sites that do not offer RSS feeds\n"
-              "The code of these hacks might sometimes not work if site owners keep\n"
-              "changing the syntax layout of their HTML too frequently\n"
-              "You will have to wait for the next update of this tool in such a case"
-    },
-    {
-      NULL, 0, 0, 0,
-      NULL,   "\nHacks (output RSS feeds by default)"
-    },
-    {
-      "google", 1, 0, RSSTOOL_GOOGLE,
-      "SEARCH", "generate RSS feed from Google SEARCH"
-    },
-    {
-      "google-news", 2, 0, RSSTOOL_GOOGLE_NEWS,
-      "SEARCH", "generate RSS feed from Google/News and remove\n"
-               "Google redirects from the links (default: latest news)"
-    },
-    {
-      "youtube",   2, 0, RSSTOOL_YOUTUBE,
-      "SEARCH",   "generate RSS feed with direct links to download\n"
-                  "the videos on Youtube (default: latest videos)"
-    },
-    {
-      "troll",   2, 0, RSSTOOL_TROLL,
-      "FLAG",   "generate RSS feed from the latest Slashdot trolls\n"
-                "FLAG=0     All (default)\n"
-                "FLAG=1     Main\n"
-                "FLAG=2     Apple\n"
-                "FLAG=4     AskSlashdot\n"
-//                "FLAG=8     Backslash\n"
-                "FLAG=16    Books\n"
-                "FLAG=32    Developers\n"
-                "FLAG=64    Games\n"
-                "FLAG=128   Hardware\n"
-                "FLAG=256   Interviews\n"
-                "FLAG=512   IT\n"
-                "FLAG=1024  Linux\n"
-                "FLAG=2048  Politics\n"
-                "FLAG=4096  Science\n"
-                "FLAG=8192  YRO\n"
-                "FLAG=16384 BSD\n"
-                "It is possible to combine flags. FLAG=3 would result\n"
-                "in Main and Apple"
-    },
-    {
-      "xxx", 2, 0, RSSTOOL_XXX,
-      "FLAG", "generate RSS feed from several free XXX sites\n"
-              "FLAG=1 Movies only (default)\n"
-              "FLAG=2 Pictures only\n"
-//              "FLAG=4 Scat Movies and/or Pictures\n"
-              "It is possible to combine flags. FLAG=3 would result\n"
-              "in Movies and Pictures"
-    },
-    {
-      "parse",   1, 0, RSSTOOL_PARSE,
-      "FILE|URL", "generate RSS feed from random HTML document"
-    },
-#endif  // USE_HACKS
     {
       NULL,       0, 0, 0,
       NULL, "\nReport problems/comments/ideas/whinge to noisyb@gmx.net\n"
@@ -445,11 +366,11 @@ main (int argc, char **argv)
   };
 
 #if 0
-  realpath2 (PROPERTY_HOME_RC ("quh"), quh.configfile);
+  realpath2 (PROPERTY_HOME_RC ("rsstool"), rsstool.configfile);
 
-  result = property_check (quh.configfile, QUH_CONFIG_VERSION, 1);
+  result = property_check (rsstool.configfile, QUH_CONFIG_VERSION, 1);
   if (result == 1) // update needed
-    result = set_property_array (quh.configfile, props);
+    result = set_property_array (rsstool.configfile, props);
   if (result == -1) // property_check() or update failed
     return -1;
 #endif
@@ -463,11 +384,15 @@ main (int argc, char **argv)
   atexit (rsstool_exit);
 
   memset (&rsstool, 0, sizeof (st_rsstool_t));
-
+  // defaults
   strncpy (rsstool.user_agent, RSSTOOL_USER_AGENT_S, sizeof (rsstool.user_agent))[sizeof (rsstool.user_agent) - 1] = 0;
   rsstool.start_time = time (0);
   rsstool.output_file = stdout;
   rsstool.csv_separator = ',';
+  rsstool.timeout = 2; // default
+#ifdef  USE_CURL
+//  rsstool.get_flags = GET_NO_CURL; // curl is always the default
+#endif
 
 //  getopt2_short (short_options, options, ARGS_MAX);
   getopt2_long_only (long_only_options, options, ARGS_MAX);
@@ -487,8 +412,32 @@ main (int argc, char **argv)
           getopt2_usage (options);
           exit (0);
 
+        case RSSTOOL_FILTER:
+          p = optarg;
+          if (p)
+            rsstool.strip_filter = p;
+          break;
+
+        case RSSTOOL_NOSORT:
+          rsstool.nosort = 1;
+          break;
+
         case RSSTOOL_REVERSE:
           rsstool.reverse = 1;
+          break;
+
+        case RSSTOOL_PARSE:
+          if (!rsstool.output)
+            rsstool.output = RSSTOOL_OUTPUT_RSS;
+          p = optarg;
+          if (p)
+            if (access (p, F_OK) != 0)
+              p = net_http_get_to_temp (p, rsstool.user_agent, rsstool.get_flags);
+
+          if (p)
+            rsstool_get_links (p);
+          else
+            fputs ("ERROR: HTML document not found\n", stderr);
           break;
 
         case RSSTOOL_LOG:
@@ -504,6 +453,12 @@ main (int argc, char **argv)
             rsstool.input_file = fopen (p, "r");
           if (!rsstool.input_file)
             fputs ("ERROR: input file not found\n", stderr);
+          break;
+
+        case RSSTOOL_ENC:
+          p = optarg;
+          if (p)
+            strncpy (rsstool.encoding, p, MAXBUFSIZE)[MAXBUFSIZE - 1] = 0;
           break;
 
         case RSSTOOL_O:
@@ -529,28 +484,11 @@ main (int argc, char **argv)
           rsstool.get_flags |= GET_USE_GZIP;
           break;
 #endif
+
 #ifdef  USE_CURL
         case RSSTOOL_CURL:
-          rsstool.get_flags |= GET_USE_CURL;
-          break;
-#endif
-
-        case RSSTOOL_WGET:
-          rsstool.get_flags |= GET_USE_WGET;
-          break;
-
-#ifdef  USE_POST1_0
-        case RSSTOOL_NEW_ONLY:
-          p = optarg;
-          if (p)
-            {
-              strncpy (rsstool.new_only_dir, p, FILENAME_MAX)[FILENAME_MAX - 1] = 0;
-              if (rsstool.new_only_dir[strlen(rsstool.new_only_dir) - 1] != '/')
-                {
-                   rsstool.new_only_dir[strlen(rsstool.new_only_dir)] = '/';
-                   rsstool.new_only_dir[FILENAME_MAX - 1] = 0;
-                }
-            }
+//          rsstool.get_flags |= GET_USE_CURL;
+          fprintf (stderr, "NOTE: "OPTION_LONG_S "curl has been deprecated; it is the default now\n");
           break;
 #endif
 
@@ -652,7 +590,7 @@ main (int argc, char **argv)
           if (p)
             {
               rsstool.output = RSSTOOL_OUTPUT_TEMPLATE;
-              strncpy (rsstool.template, p, FILENAME_MAX)[FILENAME_MAX - 1] = 0;
+              strncpy (rsstool.template_file, p, FILENAME_MAX)[FILENAME_MAX - 1] = 0;
             }
           else
             fputs ("ERROR: template not found\n", stderr);
@@ -667,17 +605,13 @@ main (int argc, char **argv)
           if (p)
             {
               rsstool.output = RSSTOOL_OUTPUT_TEMPLATE2;
-              strncpy (rsstool.template, p, FILENAME_MAX)[FILENAME_MAX - 1] = 0;
+              strncpy (rsstool.template_file, p, FILENAME_MAX)[FILENAME_MAX - 1] = 0;
             }
           else
             fputs ("ERROR: template not found\n", stderr);
           break;
 
         case RSSTOOL_SQL:
-          rsstool.ansisql_version = 0;
-          p = optarg;
-          if (p)
-            rsstool.ansisql_version = strtol (p, NULL, 10);
           rsstool.output = RSSTOOL_OUTPUT_SQL;
           break;
 
@@ -693,92 +627,8 @@ main (int argc, char **argv)
           rsstool.output = RSSTOOL_OUTPUT_DRAGONFLY;
           break;
 
-#ifdef  USE_ODBC
-        case RSSTOOL_ODBC:
-          p = optarg;
-          if (p)
-            {
-              rsstool.output = RSSTOOL_OUTPUT_ODBC;
-              strncpy (rsstool.dburl, p, FILENAME_MAX)[FILENAME_MAX - 1] = 0;
-            }
-          else
-            fputs ("ERROR: db not found\n", stderr);
-          break;
-#endif
-#ifdef  USE_MYSQL
-        case RSSTOOL_MYSQL:
-          p = optarg;
-          if (p)
-            {
-              rsstool.output = RSSTOOL_OUTPUT_MYSQL;
-              strncpy (rsstool.dburl, p, FILENAME_MAX)[FILENAME_MAX - 1] = 0;
-            }
-          else
-            fputs ("ERROR: db not found\n", stderr);
-          break;
-#endif
-
-        // hacks
-#ifdef  USE_HACKS
-        case RSSTOOL_GOOGLE:
-          if (!rsstool.output)
-            rsstool.output = RSSTOOL_OUTPUT_RSS;
-          rsstool.optarg = optarg;
-          p = optarg;
-          google_hack (&rsstool, p);
-          break;
-
-        case RSSTOOL_GOOGLE_NEWS:
-          if (!rsstool.output)
-            rsstool.output = RSSTOOL_OUTPUT_RSS;
-          rsstool.optarg = optarg;
-          p = optarg;
-          google_news_get_rss (&rsstool, p);
-          break;
-
-        case RSSTOOL_YOUTUBE:
-          if (!rsstool.output)
-            rsstool.output = RSSTOOL_OUTPUT_RSS;
-          rsstool.optarg = optarg;
-          p = optarg;
-          youtube_get_rss (&rsstool, p);
-          break;
-
-        case RSSTOOL_XXX:
-          if (!rsstool.output)
-            rsstool.output = RSSTOOL_OUTPUT_RSS;
-          if (optarg)
-            rsstool.optarg = optarg;
-          p = optarg;
-          xxx_get_rss (&rsstool, p ? strtol (p, NULL, 10) : 0);
-          break;
-
-        case RSSTOOL_TROLL:
-          if (!rsstool.output)
-            rsstool.output = RSSTOOL_OUTPUT_RSS;
-          if (optarg)
-            rsstool.optarg = optarg;
-          p = optarg;
-          troll_get_rss (&rsstool, p ? strtol (p, NULL, 10) : 0);
-          break;
-
-        case RSSTOOL_PARSE:
-          if (!rsstool.output)
-            rsstool.output = RSSTOOL_OUTPUT_RSS;
-          p = optarg;
-          if (p)
-            if (access (p, F_OK) != 0)
-              p = net_http_get_to_temp (p, rsstool.user_agent, rsstool.get_flags);
-
-          if (p)
-            rsstool_get_links (p);
-          else
-            fputs ("ERROR: HTML document not found\n", stderr);
-          break;
-#endif  // USE_HACKS
-
         default:
-          fputs ("Try 'rsstool " OPTION_LONG_S "help' for more information\n\n", stdout);
+          fputs ("Try 'rsstool " OPTION_LONG_S "help' for more information\n\n", stderr);
           exit (-1);
       }
 
@@ -879,7 +729,8 @@ main (int argc, char **argv)
   rsstool_log (&rsstool, buf);
 
   // sort rss feed
-  rsstool_sort (&rsstool);
+  if (!rsstool.nosort) 
+    rsstool_sort (&rsstool);
 
   if (rsstool.output)
     switch (rsstool.output)
@@ -897,35 +748,7 @@ main (int argc, char **argv)
           break;
 
         case RSSTOOL_OUTPUT_SQL:
-          switch (rsstool.ansisql_version)
-            {
-              case 92:
-                rsstool_write_ansisql_092 (&rsstool);
-                break;
-
-              case 94:
-                rsstool_write_ansisql_094 (&rsstool);
-                break;
-
-              case 95:
-                rsstool_write_ansisql_095 (&rsstool);
-                break;
-
-              default:
-                rsstool_write_ansisql (&rsstool);
-            }
-          break;
-
-        case RSSTOOL_OUTPUT_SQLOLD:
-          rsstool_write_ansisql_095 (&rsstool);
-          break;
-
-        case RSSTOOL_OUTPUT_JOOMLA:
-          rsstool_write_ansisql_joomla (&rsstool);
-          break;
-
-        case RSSTOOL_OUTPUT_DRAGONFLY:
-          rsstool_write_ansisql_dragonfly (&rsstool);
+          rsstool_write_ansisql (&rsstool);
           break;
 
         case RSSTOOL_OUTPUT_BOOKMARKS:
@@ -944,34 +767,31 @@ main (int argc, char **argv)
           rsstool_write_rss (&rsstool, rsstool.rss_version);
           break;
 
-#ifdef  USE_ODBC
-        case RSSTOOL_OUTPUT_ODBC:
-          rsstool_write_odbc (&rsstool);
-          break;
-#endif
-
-#ifdef  USE_MYSQL
-        case RSSTOOL_OUTPUT_MYSQL:
-          rsstool_write_mysql (&rsstool);
-          break;
-#endif
-
         case RSSTOOL_OUTPUT_TEMPLATE:
-          if (*rsstool.template)
-            rsstool_write_template (&rsstool, rsstool.template);
+          if (*rsstool.template_file)
+            rsstool_write_template (&rsstool, rsstool.template_file);
           else
             fputs ("ERROR: no input template specified\n", stderr);
           break;
 
         case RSSTOOL_OUTPUT_TEMPLATE2:
-          if (*rsstool.template)
-            rsstool_write_template2 (&rsstool, rsstool.template);
+          if (*rsstool.template_file)
+            rsstool_write_template2 (&rsstool, rsstool.template_file);
           else
             fputs ("ERROR: no input template specified\n", stderr);
           break;
 
         case RSSTOOL_OUTPUT_PROPERTY:
           rsstool_write_property (&rsstool);
+          break;
+
+        // deprecated
+        case RSSTOOL_OUTPUT_JOOMLA:
+          rsstool_write_ansisql_joomla (&rsstool);
+          break;
+
+        case RSSTOOL_OUTPUT_DRAGONFLY:
+          rsstool_write_ansisql_dragonfly (&rsstool);
           break;
     }
  

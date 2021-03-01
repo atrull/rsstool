@@ -26,27 +26,26 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #include <stdlib.h>
 #include <string.h>
 #include "itypes.h"
-#include "defines.h"
 #include "misc.h"
 #include "hash.h"
 #ifdef  USE_CRC
-#include "hash_crc.h"
+#include "crc32.h"
 #endif
 #ifdef  USE_SHA1
-#include "hash_sha1.h"
+#include "sha1.h"
 #endif
 #ifdef  USE_MD5
-#include "hash_md5.h"
+#include "md5.h"
 #endif
 #ifdef  USE_MD4
-#include "hash_md4.h"
+#include "md4.h"
 #endif
 
 
 st_hash_t *
 hash_open (int flags)
 {
-  st_hash_t *h = malloc (sizeof (st_hash_t));
+  st_hash_t *h = (st_hash_t *) malloc (sizeof (st_hash_t));
   int inited = 0;
 
   if (!h)
