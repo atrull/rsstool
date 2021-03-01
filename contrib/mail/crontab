@@ -1,0 +1,6 @@
+#MIN HOUR DAY MONTH DOW   CMD
+
+42,12 *	         * * *   rsstool --shtml --template2=.rsstool/template --pipe=procmail --new-only=.rsstool/old/ -i .rsstool/feeds.frequent
+
+21    9,14,19,23 * * *   rsstool --shtml --template2=.rsstool/template --pipe=procmail --new-only=.rsstool/old/ -i .rsstool/feeds.infrequent
+

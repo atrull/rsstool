@@ -1,0 +1,24 @@
+MAILDIR=$HOME/maildir
+DEFAULT=$HOME/maildir/personal/
+LOGFILE=$HOME/procmail.log
+SHELL=/bin/bash
+
+:0 #rss feeds
+* ^X-Mailer:.*RSStool
+{
+	:0
+	* ^X-Url:.*news
+	rss/news/
+
+	:0
+	* ^X-Url:.*rss20_bsnewreleases.php\?group_id=6950
+	rss/rsstool_releases/
+
+	:0
+	* ^X-Url:.*slashdot
+	rss/slashdot/
+
+	:0
+	rss/misc/
+}
+

@@ -1,0 +1,10 @@
+From: <rsstool:site> <rsstool@localhost>
+To: <user@localhost>
+Subject: <rsstool:title>
+Date: <rsstool:date format="%a, %d %b %Y %H:%M:%S %z">
+X-Mailer: <rsstool:rsstool>
+X-Url: <rsstool:feed_url>
+
+<rsstool:desc>
+
+<rsstool:url>
